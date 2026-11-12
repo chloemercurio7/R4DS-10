@@ -14,6 +14,7 @@ library(purrr)
 ```
 
 ```{r}
+#| cache: true
 snapshot_years <- c(2015L, 2017L, 2019L, 2021L, 2022L)
 snapshot_urls <- c(
   "https://web.archive.org/web/20150101/https://www.imdb.com/chart/top/",
