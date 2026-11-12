@@ -70,9 +70,6 @@ imdb_snapshots <- map2_dfr(
   snapshot_years,
   fetch_imdb_snapshot
 )
-
-print(imdb_snapshots)
-print(imdb_snapshots |> count(snap_year))
 ```
 
 ```{r}
