@@ -14,6 +14,50 @@ library(purrr)
 ```
 
 ```{r}
+snapshot_years <- c(2015L, 2017L, 2019L, 2021L, 2022L)
+snapshot_urls <- c(
+  "https://web.archive.org/web/20150101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20170101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20190101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20210101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20220201012049/https://www.imdb.com/chart/top/"
+)
+
+imdb_2015_response <- tryCatch(
+  request(snapshot_urls[snapshot_years == 2015]) |>
+    req_timeout(seconds = 90) |>
+    req_retry(max_tries = 3, max_seconds = 300, retry_on_failure = TRUE) |>
+    req_error(is_error = \(resp) FALSE) |>
+    req_perform(),
+  error = \(error) {
+    message(
+      "Could not fetch the 2015 Wayback capture: ",
+      conditionMessage(error),
+      ". Continuing with the saved RDS dataset."
+    )
+    NULL
+  }
+)
+
+if (!is.null(imdb_2015_response)) {
+  if (resp_status(imdb_2015_response) < 200 ||
+      resp_status(imdb_2015_response) >= 300) {
+    message(
+      "The 2015 Wayback capture returned HTTP ",
+      resp_status(imdb_2015_response),
+      ". Continuing with the saved RDS dataset."
+    )
+  } else {
+    imdb_2015_table <- imdb_2015_response |>
+      resp_body_html() |>
+      html_table()
+
+    print(imdb_2015_table[[1]] |> select(`Rank & Title`, `IMDb Rating`))
+  }
+}
+```
+
+```{r}
 imdb_snapshots <- readRDS("data/imdb_snapshots.rds")
 print(imdb_snapshots)
 print(imdb_snapshots |> count(snap_year))
