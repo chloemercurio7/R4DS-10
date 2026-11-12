@@ -54,7 +54,7 @@ fetch_imdb_snapshot <- function(address, snapshot_year) {
     rank = as.integer(rank_title_parts[, 2]),
     title = rank_title_parts[, 3],
     year = as.integer(rank_title_parts[, 4]),
-    rating = parse_number(imdb_table[["IMDb Rating"]]),
+    rating = parse_number(as.character(imdb_table[["IMDb Rating"]])),
     number = parse_number(vote_counts)
   )
 
@@ -65,28 +65,12 @@ fetch_imdb_snapshot <- function(address, snapshot_year) {
   snapshot
 }
 
-imdb_2015 <- tryCatch(
-  fetch_imdb_snapshot(
-    snapshot_urls[[match(2015L, snapshot_years)]],
-    2015L
-  ),
-  error = \(error) {
-    message(
-      "Could not scrape the 2015 Wayback capture: ",
-      conditionMessage(error),
-      ". Continuing with the saved RDS dataset."
-    )
-    NULL
-  }
+imdb_snapshots <- map2_dfr(
+  snapshot_urls,
+  snapshot_years,
+  fetch_imdb_snapshot
 )
 
-if (!is.null(imdb_2015)) {
-  print(imdb_2015)
-}
-```
-
-```{r}
-imdb_snapshots <- readRDS("data/imdb_snapshots.rds")
 print(imdb_snapshots)
 print(imdb_snapshots |> count(snap_year))
 ```
