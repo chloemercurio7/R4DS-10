@@ -23,15 +23,56 @@ snapshot_urls <- c(
   "https://web.archive.org/web/20220201012049/https://www.imdb.com/chart/top/"
 )
 
-imdb_2015_response <- tryCatch(
-  request(snapshot_urls[snapshot_years == 2015]) |>
+fetch_imdb_snapshot <- function(address, snapshot_year) {
+  response <- request(address) |>
     req_timeout(seconds = 90) |>
     req_retry(max_tries = 3, max_seconds = 300, retry_on_failure = TRUE) |>
     req_error(is_error = \(resp) FALSE) |>
-    req_perform(),
+    req_perform()
+
+  if (resp_status(response) < 200 || resp_status(response) >= 300) {
+    stop(
+      "The Wayback capture returned HTTP ",
+      resp_status(response),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  page <- resp_body_html(response)
+  imdb_table <- html_element(page, "table") |> html_table()
+  rating_tooltips <- html_elements(page, ".ratingColumn strong") |>
+    html_attr("title")
+  rank_title_parts <- str_match(
+    str_squish(imdb_table[["Rank & Title"]]),
+    "^(\\d+)\\.\\s*(.*?)\\s*\\((\\d{4})\\)$"
+  )
+  vote_counts <- str_match(rating_tooltips, "based on\\s+([\\d,]+)")[, 2]
+
+  snapshot <- tibble(
+    snap_year = as.integer(snapshot_year),
+    rank = as.integer(rank_title_parts[, 2]),
+    title = rank_title_parts[, 3],
+    year = as.integer(rank_title_parts[, 4]),
+    rating = parse_number(imdb_table[["IMDb Rating"]]),
+    number = parse_number(vote_counts)
+  )
+
+  if (nrow(snapshot) != 250L || anyNA(snapshot)) {
+    stop("The Wayback table did not parse into 250 complete rows.", call. = FALSE)
+  }
+
+  snapshot
+}
+
+imdb_2015 <- tryCatch(
+  fetch_imdb_snapshot(
+    snapshot_urls[[match(2015L, snapshot_years)]],
+    2015L
+  ),
   error = \(error) {
     message(
-      "Could not fetch the 2015 Wayback capture: ",
+      "Could not scrape the 2015 Wayback capture: ",
       conditionMessage(error),
       ". Continuing with the saved RDS dataset."
     )
@@ -39,21 +80,8 @@ imdb_2015_response <- tryCatch(
   }
 )
 
-if (!is.null(imdb_2015_response)) {
-  if (resp_status(imdb_2015_response) < 200 ||
-      resp_status(imdb_2015_response) >= 300) {
-    message(
-      "The 2015 Wayback capture returned HTTP ",
-      resp_status(imdb_2015_response),
-      ". Continuing with the saved RDS dataset."
-    )
-  } else {
-    imdb_2015_table <- imdb_2015_response |>
-      resp_body_html() |>
-      html_table()
-
-    print(imdb_2015_table[[1]] |> select(`Rank & Title`, `IMDb Rating`))
-  }
+if (!is.null(imdb_2015)) {
+  print(imdb_2015)
 }
 ```
 

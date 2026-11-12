@@ -1,0 +1,106 @@
+#
+#
+#
+#
+#
+#
+#
+#
+#| message: false
+library(tidyverse)
+library(rvest)
+library(httr2)
+library(purrr)
+#
+#
+#
+snapshot_years <- c(2015L, 2017L, 2019L, 2021L, 2022L)
+snapshot_urls <- c(
+  "https://web.archive.org/web/20150101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20170101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20190101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20210101/https://www.imdb.com/chart/top/",
+  "https://web.archive.org/web/20220201012049/https://www.imdb.com/chart/top/"
+)
+
+imdb_2015_response <- tryCatch(
+  request(snapshot_urls[snapshot_years == 2015]) |>
+    req_timeout(seconds = 90) |>
+    req_retry(max_tries = 3, max_seconds = 300, retry_on_failure = TRUE) |>
+    req_error(is_error = \(resp) FALSE) |>
+    req_perform(),
+  error = \(error) {
+    message(
+      "Could not fetch the 2015 Wayback capture: ",
+      conditionMessage(error),
+      ". Continuing with the saved RDS dataset."
+    )
+    NULL
+  }
+)
+
+if (!is.null(imdb_2015_response)) {
+  if (resp_status(imdb_2015_response) < 200 ||
+      resp_status(imdb_2015_response) >= 300) {
+    message(
+      "The 2015 Wayback capture returned HTTP ",
+      resp_status(imdb_2015_response),
+      ". Continuing with the saved RDS dataset."
+    )
+  } else {
+    imdb_2015_table <- imdb_2015_response |>
+      resp_body_html() |>
+      html_table()
+
+    print(imdb_2015_table[[1]] |> select(`Rank & Title`, `IMDb Rating`))
+  }
+}
+#
+#
+#
+imdb_snapshots <- readRDS("data/imdb_snapshots.rds")
+print(imdb_snapshots)
+print(imdb_snapshots |> count(snap_year))
+#
+#
+#
+rank_changes <- imdb_snapshots |>
+  filter(snap_year %in% c(2015, 2022)) |>
+  select(title, year, snap_year, rank) |>
+  pivot_wider(names_from = snap_year, values_from = rank, names_prefix = "rank_") |>
+  drop_na() |>
+  mutate(
+    release_decade = (year %/% 10) * 10,
+    rank_change = abs(rank_2015 - rank_2022)
+  )
+
+print(rank_changes |>
+  arrange(desc(rank_change), title) |>
+  slice_head(n = 10))
+
+print(rank_changes |>
+  group_by(release_decade) |>
+  summarize(average_rank_change = mean(rank_change), .groups = "drop") |>
+  arrange(release_decade))
+#
+#
+#
+film_snapshot_counts <- imdb_snapshots |>
+  distinct(title, snap_year) |>
+  count(title, name = "snapshots_appeared")
+
+snapshot_distribution <- film_snapshot_counts |>
+  count(snapshots_appeared, name = "films")
+
+print(snapshot_distribution)
+
+ggplot(snapshot_distribution, aes(x = factor(snapshots_appeared), y = films)) +
+  geom_col() +
+  labs(
+    x = "Number of snapshots",
+    y = "Number of films"
+  )
+#
+#
+#
+#
